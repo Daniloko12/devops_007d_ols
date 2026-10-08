@@ -1,0 +1,56 @@
+name: CI Microservicio Java
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-test-scan-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   
+
+    steps:
+    - name: Clonar codigo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+
+    - name: Compilar y Ejecutar Pruebas
+      working-directory: peliculas/peliculas/peliculas
+      run: mvn -B clean verify
+
+    - name: Análisis de Seguridad con SonarCloud
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      with:
+        projectBaseDir: peliculas/peliculas/peliculas
+        args: >
+          -Dsonar.organization=daniloko1212
+          -Dsonar.projectKey=Daniloko12_devops_007d_ols2
+
+    - name: Login to Registry (GHCR)
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and Push Docker Image
+      uses: docker/build-push-action@v6
+      with:
+        context: ./peliculas/peliculas/peliculas
+        push: true
+        tags: ghcr.io/${{ github.repository }}:latest
