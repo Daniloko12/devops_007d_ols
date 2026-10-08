@@ -2,7 +2,7 @@ name: CI Microservicio Java
 
 on:
   push:
-    branches: [ "develop" ]
+    branches: [ "develop","main" ]
   pull_request:
     branches: [ "main" ]
 
