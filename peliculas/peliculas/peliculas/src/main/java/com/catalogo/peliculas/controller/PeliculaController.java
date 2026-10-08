@@ -96,5 +96,6 @@ public String actualizar(@PathVariable Integer id, @RequestBody Pelicula pelicul
         return "Película no encontrada con id: " + id;
     }
 }
+  
 // "fix :se agrega comentario para hacer un cambio tipo hotfix" 
 }
