@@ -1,11 +1,41 @@
 version: '3.8'
 
 services:
-  microservicio-peliculas:
-    build: .
-    container_name: app-peliculas
+  mysqldb:
+    image: mysql:8.0
+    container_name: mysql_peliculas
+    #  Variables leídas desde el archivo .env
+    environment:
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    # Volúmenes para que los datos no se borren si apagas Docker
+    volumes:
+      - mysql_data:/var/lib/mysql
+    #  Healthcheck para confirmar que MySQL está realmente listo
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app-peliculas:
+    build: 
+      context: ./peliculas/peliculas/peliculas
+      file: ./Dockerfile
+    container_name: app_peliculas
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=prod
-    restart: unless-stopped
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/${DB_NAME}?useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+    #  Orden de arranque. La app espera a que MySQL esté "healthy"
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+
+# Declaración del volumen externo
+volumes:
+  mysql_data:
