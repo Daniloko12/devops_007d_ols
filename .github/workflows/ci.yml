@@ -29,7 +29,7 @@ jobs:
     - name: Compilar y Ejecutar Pruebas
       working-directory: peliculas/peliculas/peliculas
       run: mvn -B clean verify -DskipTests
-      
+
     - name: Análisis de Seguridad con SonarCloud
       uses: SonarSource/sonarcloud-github-action@master
       env:
@@ -53,4 +53,4 @@ jobs:
       with:
         context: ./peliculas/peliculas/peliculas
         push: true
-        tags: ghcr.io/${{ github.repository }}:latest
+        tags: ghcr.io/daniloko12/devops_007d_ols:latest
