@@ -39,7 +39,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: reporte-pruebas
-          path: peliculas/peliculas/peliculas/target/site/ 
+          path: peliculas/peliculas/peliculas/target/
 
       - name: Análisis de Seguridad con SonarCloud
         uses: SonarSource/sonarcloud-github-action@master
