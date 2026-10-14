@@ -28,7 +28,7 @@ jobs:
 
       - name: Compilar y Ejecutar Pruebas
         working-directory: peliculas/peliculas/peliculas
-        run: mvn -B clean verify -DskipTests
+        run: mvn -B clean verify surefire-report:report
 
       - name: Análisis de Seguridad con SonarCloud
         uses: SonarSource/sonarcloud-github-action@master
