@@ -48,9 +48,10 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build and Push Docker Image
-      uses: docker/build-push-action@v6
-      with:
-        context: ./peliculas/peliculas/peliculas
-        push: true
-        tags: ghcr.io/daniloko12/devops_007d_ols:latest
+    - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./peliculas/peliculas/peliculas
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/daniloko12/devops_007d_ols:latest
