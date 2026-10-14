@@ -52,6 +52,14 @@ jobs:
             -Dsonar.organization=daniloko1212
             -Dsonar.projectKey=Daniloko12_devops_007d_ols2
 
+      - name: Análisis de vulnerabilidades con Snyk
+        uses: snyk/actions/maven@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --file=peliculas/peliculas/peliculas/pom.xml      
+
       - name: Login to Registry (GHCR)
         uses: docker/login-action@v4
         with:
