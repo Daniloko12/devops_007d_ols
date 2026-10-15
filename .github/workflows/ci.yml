@@ -36,7 +36,7 @@ jobs:
 
       - name: Guardar Reporte HTML de Pruebas
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reporte-pruebas
           path: peliculas/peliculas/peliculas/target/
