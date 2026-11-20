@@ -1,0 +1,16 @@
+# Excepciones DOCUMENTADAS del escaneo de configuración (Trivy config).
+# Regla: cada excepción indica el archivo exacto y su justificación técnica.
+# No se agregan excepciones para "pasar" el gate: se revisan en cada PR que las toque.
+misconfigurations:
+  # Raíz del sistema de archivos de solo lectura (readOnlyRootFilesystem)
+  - id: AVD-KSV-0014
+    paths:
+      - "k8s/mysql.yaml"
+    statement: >-
+      La imagen oficial de MySQL escribe en /var/run/mysqld y /tmp fuera del volumen de datos.
+      Compensación: el contenedor corre sin root (UID 999), sin escalamiento de privilegios,
+      sin capacidades (drop ALL) y con seccomp RuntimeDefault.
+  - id: KSV014
+    paths:
+      - "k8s/mysql.yaml"
+    statement: Mismo caso anterior (identificador corto de la misma regla).

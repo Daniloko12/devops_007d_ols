@@ -11,24 +11,29 @@
 	<groupId>com.catalogo</groupId>
 	<artifactId>peliculas</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
-	<url/>
-	<licenses>
-		<license/>
-	</licenses>
-	<developers>
-		<developer/>
-	</developers>
-	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
-	</scm>
+	<name>peliculas</name>
+	<description>Microservicio de catálogo de películas</description>
+
 	<properties>
 		<java.version>21</java.version>
+
+		<!-- Versiones de librerías/plugins no gestionadas por Spring Boot -->
+		<!-- springdoc 3.0.x es la línea compatible con Spring Boot 4.0.x -->
+		<springdoc.version>3.0.3</springdoc.version>
+		<jacoco.version>0.8.14</jacoco.version>
+
+		<!-- GATE DE COBERTURA: si las pruebas cubren menos de este porcentaje,
+		     "mvn verify" termina con BUILD FAILURE (exit code 1) y el pipeline se detiene. -->
+		<cobertura.minima>0.80</cobertura.minima>
+
+		<!-- Configuración de SonarCloud (usada por "mvn sonar:sonar" en el pipeline) -->
+		<sonar.organization>daniloko1212</sonar.organization>
+		<sonar.projectKey>Daniloko12_devops_007d_ols2</sonar.projectKey>
+		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
+		<sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+		<sonar.coverage.exclusions>**/PeliculasApplication.java</sonar.coverage.exclusions>
 	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -43,6 +48,30 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
+		<!-- ===== OBSERVABILIDAD ===== -->
+		<!-- Actuator: endpoints /actuator/health (probes de Kubernetes), /actuator/info, /actuator/prometheus -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<!-- Micrometer: métricas de JVM, CPU, HTTP (http_server_requests) y métricas propias -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-micrometer-metrics</artifactId>
+		</dependency>
+		<!-- Publica las métricas en el formato que Prometheus lee (/actuator/prometheus) -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<!-- Trazabilidad: Micrometer Tracing (Brave) agrega traceId y spanId a cada línea de log.
+		     El envío de trazas a Zipkin queda desactivado en application.properties. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-zipkin</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>com.mysql</groupId>
 			<artifactId>mysql-connector-j</artifactId>
@@ -53,6 +82,13 @@
 			<artifactId>lombok</artifactId>
 			<optional>true</optional>
 		</dependency>
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>${springdoc.version}</version>
+		</dependency>
+
+		<!-- ===== PRUEBAS ===== -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
@@ -68,19 +104,12 @@
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Base de datos en memoria para pruebas (perfil "test") -->
 		<dependency>
-			<groupId>org.springdoc</groupId>
-			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-			<version>2.6.0</version>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>test</scope>
 		</dependency>
-
-		<!-- Base de datos en memoria para pruebas unitarias -->
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>test</scope>
-        </dependency>	
-		
 	</dependencies>
 
 	<build>
@@ -88,6 +117,14 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<executions>
+					<!-- Genera META-INF/build-info.properties: /actuator/info muestra versión y fecha de build -->
+					<execution>
+						<goals>
+							<goal>build-info</goal>
+						</goals>
+					</execution>
+				</executions>
 				<configuration>
 					<excludes>
 						<exclude>
@@ -129,6 +166,63 @@
 									<artifactId>lombok</artifactId>
 								</path>
 							</annotationProcessorPaths>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- ===== JaCoCo: cobertura de pruebas + gate de calidad ===== -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${jacoco.version}</version>
+				<configuration>
+					<excludes>
+						<!-- Clase de arranque: solo contiene el método main -->
+						<exclude>com/catalogo/peliculas/PeliculasApplication.class</exclude>
+					</excludes>
+				</configuration>
+				<executions>
+					<!-- 1. Instrumenta la JVM de las pruebas para medir qué líneas se ejecutan -->
+					<execution>
+						<id>preparar-agente</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<!-- 2. Genera target/site/jacoco/ (HTML para revisar + XML para SonarCloud) -->
+					<execution>
+						<id>reporte</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+					<!-- 3. Gate: falla el build si la cobertura de líneas o ramas es menor a cobertura.minima -->
+					<execution>
+						<id>verificar-cobertura</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${cobertura.minima}</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${cobertura.minima}</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
 						</configuration>
 					</execution>
 				</executions>

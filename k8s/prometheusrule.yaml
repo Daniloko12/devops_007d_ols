@@ -1,0 +1,98 @@
+# Reglas de alerta evaluadas por Prometheus cada 30 s.
+# Se ven en Prometheus (Alerts) y en Grafana (Alerting > Alert rules).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: peliculas-alertas
+  labels:
+    app.kubernetes.io/name: peliculas
+spec:
+  groups:
+    - name: peliculas.disponibilidad
+      rules:
+        - alert: PeliculasSinReplicasDisponibles
+          # absent() también cubre el caso en que no existe ningún pod que scrapear
+          expr: absent(up{job="peliculas"} == 1)
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "El microservicio peliculas no tiene ninguna réplica respondiendo"
+            description: "Ningún pod de peliculas responde en /actuator/prometheus desde hace más de 1 minuto."
+        - alert: PeliculasReplicaCaida
+          expr: up{job="peliculas"} == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Una réplica de peliculas no responde"
+            description: "El pod {{ $labels.pod }} no responde desde hace más de 2 minutos."
+        - alert: MySQLCaido
+          expr: mysql_up == 0 or absent(mysql_up)
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "La base de datos MySQL no está disponible"
+            description: "mysqld-exporter no logra conectarse a MySQL desde hace más de 1 minuto."
+
+    - name: peliculas.errores
+      rules:
+        - alert: PeliculasTasaErrores5xxAlta
+          # Se excluye /actuator para que el tráfico de las probes no diluya la tasa
+          expr: |
+            sum(rate(http_server_requests_seconds_count{job="peliculas", status=~"5..", uri!~"/actuator.*"}[5m]))
+              /
+            sum(rate(http_server_requests_seconds_count{job="peliculas", uri!~"/actuator.*"}[5m]))
+              > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Más del 5 % de las peticiones terminan en error 5xx"
+            description: "Tasa de errores 5xx: {{ $value | humanizePercentage }} en los últimos 5 minutos."
+        - alert: PeliculasLatenciaP95Alta
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(http_server_requests_seconds_bucket{job="peliculas", uri!~"/actuator.*"}[5m]))
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "La latencia p95 supera 1 segundo"
+            description: "p95 actual: {{ $value | humanizeDuration }}."
+
+    - name: peliculas.recursos
+      rules:
+        - alert: PeliculasReiniciosFrecuentes
+          expr: increase(kube_pod_container_status_restarts_total{namespace="peliculas"}[15m]) > 2
+          labels:
+            severity: warning
+          annotations:
+            summary: "Un contenedor se reinició más de 2 veces en 15 minutos"
+            description: "Contenedor {{ $labels.container }} del pod {{ $labels.pod }}."
+        - alert: PeliculasMemoriaCercaDelLimite
+          expr: |
+            max by (pod) (container_memory_working_set_bytes{namespace="peliculas", container="peliculas"})
+              /
+            max by (pod) (kube_pod_container_resource_limits{namespace="peliculas", container="peliculas", resource="memory"})
+              > 0.9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Un pod de peliculas usa más del 90 % de su límite de memoria"
+            description: "Pod {{ $labels.pod }}: {{ $value | humanizePercentage }} del límite."
+        - alert: PeliculasCPUCercaDelLimite
+          expr: |
+            sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="peliculas", container="peliculas"}[5m]))
+              /
+            sum by (pod) (kube_pod_container_resource_limits{namespace="peliculas", container="peliculas", resource="cpu"})
+              > 0.8
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Un pod de peliculas usa más del 80 % de su límite de CPU"
+            description: "Pod {{ $labels.pod }}: {{ $value | humanizePercentage }} del límite."

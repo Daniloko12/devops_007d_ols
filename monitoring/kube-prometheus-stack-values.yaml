@@ -1,0 +1,72 @@
+# kube-prometheus-stack: Prometheus Operator + Prometheus + Grafana
+# + kube-state-metrics + node-exporter (métricas de CPU/memoria de pods y nodos).
+fullnameOverride: kps
+
+# Alertmanager no se usa: las alertas se revisan en Prometheus y Grafana
+alertmanager:
+  enabled: false
+
+# kind no expone estos componentes del control plane: se desactivan
+# para no generar alertas falsas de "target down"
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+defaultRules:
+  rules:
+    etcd: false
+    kubeControllerManager: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeProxy: false
+
+# En kind/Docker el montaje de "/" del host no es compartido; sin esto node-exporter no arranca
+prometheus-node-exporter:
+  hostRootFsMount:
+    enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 2d
+    scrapeInterval: 15s
+    evaluationInterval: 30s
+    # Descubre TODOS los ServiceMonitor y PrometheusRule del clúster
+    # (no solo los creados por este chart): así encuentra los de k8s/
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1536Mi
+
+grafana:
+  adminUser: admin
+  # adminPassword NO se escribe aquí: scripts/install-monitoring.sh lo entrega con --set
+  defaultDashboardsTimezone: America/Santiago
+  sidecar:
+    dashboards:
+      enabled: true
+      # Grafana carga como dashboard todo ConfigMap con esta etiqueta, en cualquier namespace
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki-gateway.monitoring.svc.cluster.local
+      jsonData:
+        maxLines: 1000

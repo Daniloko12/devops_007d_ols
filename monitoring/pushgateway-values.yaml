@@ -1,0 +1,10 @@
+# Pushgateway: recibe las métricas que el pipeline CI/CD empuja al terminar
+# (cobertura, tests, duración del build y del despliegue) para que Prometheus
+# las guarde y Grafana las muestre junto a las métricas de la aplicación.
+fullnameOverride: pushgateway
+
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  # Conserva las etiquetas que envía el pipeline (branch, commit) en vez de reemplazarlas
+  honorLabels: true

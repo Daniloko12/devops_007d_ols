@@ -1,0 +1,12 @@
+# Pod Security Standards en nivel "restricted" (el más estricto de Kubernetes):
+# rechaza pods que corran como root, escalen privilegios o no limiten capacidades.
+# Control alineado con CIS Kubernetes Benchmark (sección 5.2, políticas de pods).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: peliculas
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
