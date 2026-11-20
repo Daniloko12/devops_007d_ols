@@ -1,2 +1,3 @@
 fecha_utc,commit,rama,cobertura_lineas_pct,cobertura_ramas_pct,tests,tests_fallidos,build_s,despliegue_s,vulnerabilidades_altas,run_id
 2026-11-20T23:10:34Z,ec85da0,main,100.0,100.0,30,0,25,65,0,44833708730
+2026-11-20T23:24:28Z,adde32f,main,100.0,100.0,30,0,35,36,0,44835379907
