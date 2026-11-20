@@ -18,7 +18,19 @@ credenciales_root() {
   printf '[client]\npassword="%s"\n' "${MYSQL_ROOT_PASSWORD}"
 }
 
-mysql --defaults-extra-file=<(credenciales_root) --protocol=socket -uroot <<SQL
+# El socket se toma de la configuración del servidor (igual que el entrypoint oficial).
+# No se usa la ruta por defecto del cliente: en la imagen mysql 8.0.46 el servidor escucha en
+# /var/lib/mysql/mysql.sock y el cliente busca /var/run/mysqld/mysqld.sock (ERROR 2002).
+# Durante la inicialización el servidor temporal no abre TCP, por eso se usa el socket.
+SOCKET=""
+for candidato in \
+  "$(mysqld --verbose --help 2>/dev/null | awk '$1 == "socket" { print $2; exit }')" \
+  /var/lib/mysql/mysql.sock /var/run/mysqld/mysqld.sock; do
+  if [[ -n "$candidato" && -S "$candidato" ]]; then SOCKET="$candidato"; break; fi
+done
+[[ -n "$SOCKET" ]] || { echo "No se encontró el socket de MySQL"; exit 1; }
+
+mysql --defaults-extra-file=<(credenciales_root) --protocol=socket --socket="$SOCKET" -uroot <<SQL
 CREATE USER IF NOT EXISTS 'exporter'@'localhost' IDENTIFIED BY '${EXPORTER_PASSWORD}';
 CREATE USER IF NOT EXISTS 'exporter'@'127.0.0.1' IDENTIFIED BY '${EXPORTER_PASSWORD}';
 ALTER USER 'exporter'@'localhost' IDENTIFIED BY '${EXPORTER_PASSWORD}' WITH MAX_USER_CONNECTIONS 3;
