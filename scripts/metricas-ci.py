@@ -65,6 +65,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--proyecto", required=True, help="Carpeta del proyecto Maven")
     parser.add_argument("--salida", required=True, help="Archivo .prom a generar")
+    parser.add_argument("--markdown", help="Archivo Markdown opcional con la tabla de resumen (Job Summary)")
     args = parser.parse_args()
 
     commit = os.environ.get("CI_COMMIT") or git("rev-parse", "--short", "HEAD")
@@ -97,6 +98,24 @@ def main():
 
     print(f"Métricas del pipeline -> {args.salida}")
     print(f"  cobertura líneas: {lineas:.1%} | ramas: {ramas:.1%} | tests: {ejecutados} ({fallidos} fallidos)")
+
+    if args.markdown:
+        def marca(ok):
+            return "✅" if ok else "❌"
+        filas = [
+            ("Cobertura de líneas (JaCoCo)", f"{lineas:.1%}", "≥ 80 %", marca(lineas >= 0.80)),
+            ("Cobertura de ramas (JaCoCo)", f"{ramas:.1%}", "≥ 80 %", marca(ramas >= 0.80)),
+            ("Tests ejecutados", str(ejecutados), "—", ""),
+            ("Tests fallidos", str(fallidos), "0", marca(fallidos == 0)),
+            ("Duración de los tests", f"{duracion_tests:.1f} s", "—", ""),
+        ]
+        if os.environ.get("CI_BUILD_SEGUNDOS"):
+            filas.append(("Duración del build", f"{os.environ['CI_BUILD_SEGUNDOS']} s", "—", ""))
+        with open(args.markdown, "w", encoding="utf-8") as f:
+            f.write(f"### Calidad del build · commit `{commit[:7]}`\n\n")
+            f.write("| Métrica | Valor | Umbral | Estado |\n|---|---|---|---|\n")
+            for nombre, valor, umbral, estado in filas:
+                f.write(f"| {nombre} | {valor} | {umbral} | {estado} |\n")
 
 
 if __name__ == "__main__":

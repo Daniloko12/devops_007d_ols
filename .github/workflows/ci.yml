@@ -1,72 +1,538 @@
-name: CI Microservicio Java
+# =============================================================================
+# Pipeline CI/CD del microservicio peliculas (EP3)
+#
+#   gate-tests-cobertura ──┬── gate-sonarcloud ──┐
+#                          ├── gate-snyk ────────┼── imagen-docker ── despliegue-k8s
+#                          └── gate-auditoria ───┘          (solo main / manual)
+#                                                 reporte-auditoria (siempre)
+#
+# Cada gate termina con exit code != 0 ante una falla crítica. Como imagen-docker
+# y despliegue-k8s dependen de ellos (needs), quedan "skipped": nada se publica
+# ni se despliega. La regla de protección de main exige además estos checks en verde.
+# =============================================================================
+name: CI/CD Microservicio Peliculas
 
 on:
   push:
-    branches: [ "develop","main" ]
+    branches: [develop, main]
   pull_request:
-    branches: [ "main" ]
+    branches: [develop, main]
+  workflow_dispatch:
+    inputs:
+      simular_falla_despliegue:
+        description: "Desplegar a propósito una versión defectuosa para demostrar el rollback automático"
+        type: boolean
+        default: false
+
+# Un PR nuevo cancela la ejecución anterior del mismo PR; main nunca se cancela a medias
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Mínimo privilegio: cada job pide solo los permisos adicionales que necesita
+permissions:
+  contents: read
+
+env:
+  PROYECTO: peliculas/peliculas/peliculas
+  IMAGEN: ghcr.io/daniloko12/devops_007d_ols
+  # Trivy y Gitleaks se ejecutan desde sus imágenes oficiales con versión fija, no con
+  # acciones de terceros: en marzo de 2026 los tags de aquasecurity/trivy-action fueron
+  # reescritos con malware (CVE-2026-33634). 0.69.3 es una versión declarada segura.
+  TRIVY_IMAGE: aquasec/trivy:0.69.3
+  GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1
 
 jobs:
-  build-test-scan-deploy:
+  # ---------------------------------------------------------------------------
+  # GATE 1: compila, ejecuta las pruebas y exige cobertura mínima (JaCoCo)
+  # ---------------------------------------------------------------------------
+  gate-tests-cobertura:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write   
-
+    timeout-minutes: 15
+    outputs:
+      duracion: ${{ steps.medir.outputs.segundos }}
     steps:
-      - name: Clonar codigo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          distribution: temurin
+          java-version: "21"
           cache: maven
 
-      - name: Compilar y Ejecutar Pruebas
-        working-directory: peliculas/peliculas/peliculas
-        run: mvn -B clean verify surefire-report:report
+      - name: Registrar inicio
+        run: echo "INICIO=$(date +%s)" >> "$GITHUB_ENV"
 
-      - name: Guardar Reporte HTML de Pruebas
+      - name: Compilar, ejecutar tests y exigir cobertura >= 80 % (falla si no se cumple)
+        working-directory: ${{ env.PROYECTO }}
+        run: mvn -B -ntp clean verify
+
+      - name: Medir duración del build
+        id: medir
+        if: always()
+        run: echo "segundos=$(( $(date +%s) - INICIO ))" >> "$GITHUB_OUTPUT"
+
+      - name: Generar reporte HTML de pruebas
+        if: always()
+        working-directory: ${{ env.PROYECTO }}
+        run: mvn -B -ntp surefire-report:report-only || echo "No se pudo generar el reporte HTML"
+
+      - name: Resumen de calidad en la ejecución
+        if: always()
+        env:
+          CI_BUILD_SEGUNDOS: ${{ steps.medir.outputs.segundos }}
+          CI_COMMIT: ${{ github.sha }}
+          CI_RAMA: ${{ github.head_ref || github.ref_name }}
+        run: |
+          if python3 scripts/metricas-ci.py --proyecto "$PROYECTO" --salida pipeline-metrics.prom --markdown resumen.md; then
+            cat resumen.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Sin reportes: el build falló antes de ejecutar las pruebas." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publicar reportes de pruebas y cobertura
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reporte-pruebas
-          path: peliculas/peliculas/peliculas/target/
+          name: reportes-pruebas
+          path: |
+            ${{ env.PROYECTO }}/target/site/jacoco/
+            ${{ env.PROYECTO }}/target/surefire-reports/
+            ${{ env.PROYECTO }}/target/reports/
+          if-no-files-found: ignore
+          retention-days: 30
 
-      - name: Análisis de Seguridad con SonarCloud
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  # ---------------------------------------------------------------------------
+  # GATE 2: análisis estático (SAST) + Quality Gate de SonarCloud
+  # ---------------------------------------------------------------------------
+  gate-sonarcloud:
+    needs: gate-tests-cobertura
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
         with:
-          projectBaseDir: peliculas/peliculas/peliculas
-          args: >
-            -Dsonar.organization=daniloko1212
-            -Dsonar.projectKey=Daniloko12_devops_007d_ols2
+          fetch-depth: 0 # SonarCloud necesita el historial para detectar el "código nuevo"
 
-      - name: Análisis de vulnerabilidades con Snyk
-        uses: snyk/actions/maven@master
-        continue-on-error: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Caché de SonarCloud
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: sonar-${{ runner.os }}
+          restore-keys: sonar-${{ runner.os }}
+
+      - name: Análisis SAST y espera del Quality Gate (falla si no se aprueba)
+        working-directory: ${{ env.PROYECTO }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          mvn -B -ntp verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.qualitygate.wait=true
+          -Dsonar.qualitygate.timeout=300
+
+  # ---------------------------------------------------------------------------
+  # GATE 3: dependencias vulnerables (SCA) con Snyk
+  # ---------------------------------------------------------------------------
+  gate-snyk:
+    needs: gate-tests-cobertura
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write # publicar resultados en la pestaña Security
+    outputs:
+      vulnerabilidades: ${{ steps.contar.outputs.altas }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Instalar Snyk CLI
+        run: npm install --global snyk@1
+
+      - name: Escaneo SCA (falla si hay vulnerabilidades high o critical)
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --file=peliculas/peliculas/peliculas/pom.xml      
+        run: >
+          snyk test --file="$PROYECTO/pom.xml"
+          --severity-threshold=high
+          --json-file-output=snyk.json
+          --sarif-file-output=snyk.sarif
 
-      - name: Login to Registry (GHCR)
+      - name: Contar vulnerabilidades high/critical
+        id: contar
+        if: always()
+        run: |
+          ALTAS=""
+          if [[ -f snyk.json ]]; then
+            ALTAS="$(python3 - <<'EOF'
+          import json
+          datos = json.load(open("snyk.json"))
+          proyectos = datos if isinstance(datos, list) else [datos]
+          ids = {v["id"] for p in proyectos for v in p.get("vulnerabilities", [])
+                 if v.get("severity") in ("high", "critical")}
+          print(len(ids))
+          EOF
+          )"
+          fi
+          echo "altas=$ALTAS" >> "$GITHUB_OUTPUT"
+          echo "### Snyk (SCA): ${ALTAS:-sin datos} vulnerabilidades high/critical (umbral: 0)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Registrar dependencias en Snyk para monitoreo continuo
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true # informativo, no es un gate
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk monitor --file="$PROYECTO/pom.xml" --project-name=peliculas
+
+      - name: Publicar resultados en GitHub Security
+        if: always() && hashFiles('snyk.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: snyk.sarif
+          category: snyk-sca
+
+  # ---------------------------------------------------------------------------
+  # GATE 4: auditoría automatizada (secretos + infraestructura como código)
+  # ---------------------------------------------------------------------------
+  gate-auditoria:
+    needs: gate-tests-cobertura
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Gitleaks revisa los commits del push o del PR
+
+      - name: Validar manifiestos de Kubernetes (kustomize build)
+        run: |
+          kubectl kustomize k8s/ > /tmp/manifiestos.yaml
+          echo "Manifiestos válidos: $(grep -c '^kind:' /tmp/manifiestos.yaml) recursos"
+
+      - name: Gitleaks - secretos en el código (falla si encuentra alguno)
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          HEAD_PR: ${{ github.event.pull_request.head.sha }}
+          ANTES: ${{ github.event.before }}
+        run: |
+          mkdir -p reportes
+          # PR: commits del PR | push: commits nuevos | manual: archivos actuales
+          if [[ "$EVENTO" == "pull_request" ]]; then
+            ARGS=(git "--log-opts=--no-merges ${BASE_PR}..${HEAD_PR}")
+          elif [[ "$EVENTO" == "push" && -n "$ANTES" && ! "$ANTES" =~ ^0+$ ]]; then
+            ARGS=(git "--log-opts=${ANTES}..${GITHUB_SHA}")
+          else
+            ARGS=(dir)
+          fi
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo "$GITLEAKS_IMAGE" \
+            "${ARGS[@]}" --redact --verbose \
+            --report-format sarif --report-path reportes/gitleaks.sarif /repo
+
+      - name: Trivy - configuración insegura en Dockerfile y Kubernetes (falla con HIGH/CRITICAL)
+        if: always()
+        run: |
+          mkdir -p "$HOME/.cache/trivy" reportes
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/src" -w /src \
+            -v "$HOME/.cache/trivy:/cache" -e TRIVY_CACHE_DIR=/cache "$TRIVY_IMAGE" \
+            config --severity HIGH,CRITICAL --exit-code 1 --ignorefile .trivyignore.yaml .
+
+      - name: Trivy - reporte SARIF de configuración
+        if: always()
+        run: |
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/src" -w /src \
+            -v "$HOME/.cache/trivy:/cache" -e TRIVY_CACHE_DIR=/cache "$TRIVY_IMAGE" \
+            config --severity HIGH,CRITICAL --ignorefile .trivyignore.yaml \
+            --format sarif --output reportes/trivy-config.sarif . || true
+
+      - name: Publicar hallazgos de Gitleaks en GitHub Security
+        if: always() && hashFiles('reportes/gitleaks.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: reportes/gitleaks.sarif
+          category: gitleaks
+
+      - name: Publicar hallazgos de Trivy config en GitHub Security
+        if: always() && hashFiles('reportes/trivy-config.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: reportes/trivy-config.sarif
+          category: trivy-config
+
+      - name: Guardar reportes de auditoría
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-auditoria-seguridad
+          path: reportes/
+          if-no-files-found: ignore
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Imagen Docker: solo se construye si los 4 gates pasaron.
+  # Gate 5 (Trivy image) antes de publicar. Se publica solo desde main o manual.
+  # ---------------------------------------------------------------------------
+  imagen-docker:
+    needs: [gate-tests-cobertura, gate-sonarcloud, gate-snyk, gate-auditoria]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    env:
+      PUBLICAR: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Calcular tag de la imagen (trazabilidad commit -> imagen)
+        id: version
+        run: |
+          echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construir imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: ./peliculas/peliculas/peliculas
+          file: ./Dockerfile
+          load: true
+          push: false
+          tags: ${{ env.IMAGEN }}:${{ steps.version.outputs.tag }}
+          build-args: GIT_COMMIT=${{ steps.version.outputs.commit }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy - vulnerabilidades HIGH/CRITICAL con corrección en la imagen (falla si hay)
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          mkdir -p "$HOME/.cache/trivy"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/cache" -e TRIVY_CACHE_DIR=/cache "$TRIVY_IMAGE" \
+            image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$IMAGEN:$TAG"
+
+      - name: Trivy - reporte SARIF de la imagen
+        if: always()
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out" \
+            -v "$HOME/.cache/trivy:/cache" -e TRIVY_CACHE_DIR=/cache "$TRIVY_IMAGE" \
+            image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --format sarif --output /out/trivy-imagen.sarif "$IMAGEN:$TAG" || true
+
+      - name: Publicar hallazgos de la imagen en GitHub Security
+        if: always() && hashFiles('trivy-imagen.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-imagen.sarif
+          category: trivy-imagen
+
+      - name: Iniciar sesión en GHCR
+        if: env.PUBLICAR == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+      - name: Publicar imagen en GHCR (tag inmutable por commit)
+        if: env.PUBLICAR == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: docker push "$IMAGEN:$TAG"
+
+  # ---------------------------------------------------------------------------
+  # Despliegue en Kubernetes (kind) con producción simulada, smoke tests,
+  # rollback automático y promoción a "stable". Solo main o ejecución manual.
+  # ---------------------------------------------------------------------------
+  despliegue-k8s:
+    needs: [gate-tests-cobertura, gate-snyk, imagen-docker]
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write # registrar el historial de métricas en la rama metrics-history
+      packages: write # promover la imagen a stable
+    env:
+      TAG: ${{ needs.imagen-docker.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Crear clúster Kubernetes (kind)
+        run: kind create cluster --name ep3 --config monitoring/kind-config.yaml --wait 120s
+
+      - name: Instalar observabilidad (Prometheus, Grafana, Loki, Alloy, Pushgateway)
+        run: ./scripts/install-monitoring.sh
+
+      - name: Iniciar sesión en GHCR
+        uses: docker/login-action@v4
         with:
-          context: ./peliculas/peliculas/peliculas
-          file: ./Dockerfile
-          push: true
-          tags: ghcr.io/daniloko12/devops_007d_ols:latest
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cargar imágenes en el clúster (nueva versión y stable)
+        run: |
+          docker pull "$IMAGEN:$TAG"
+          kind load docker-image "$IMAGEN:$TAG" --name ep3
+          if docker manifest inspect "$IMAGEN:stable" >/dev/null 2>&1; then
+            docker pull "$IMAGEN:stable"
+            kind load docker-image "$IMAGEN:stable" --name ep3
+            echo "HAY_STABLE=true" >> "$GITHUB_ENV"
+          else
+            echo "HAY_STABLE=false" >> "$GITHUB_ENV"
+            echo "Primera ejecución: todavía no existe una versión stable."
+          fi
+
+      - name: Crear secretos (credenciales aleatorias por ejecución, nunca en logs)
+        run: ./scripts/create-secrets.sh
+
+      - name: Desplegar la versión en producción (stable)
+        if: env.HAY_STABLE == 'true'
+        run: ./scripts/desplegar.sh "$IMAGEN" stable
+
+      - name: Desplegar la nueva versión y ejecutar smoke tests
+        id: despliegue
+        env:
+          SIMULAR_FALLA: ${{ inputs.simular_falla_despliegue == true }}
+        run: |
+          INICIO=$(date +%s)
+          ./scripts/desplegar.sh "$IMAGEN" "$TAG"
+          ./scripts/smoke-test.sh
+          echo "segundos=$(( $(date +%s) - INICIO ))" >> "$GITHUB_OUTPUT"
+
+      - name: Rollback automático (protege la versión en producción)
+        if: failure() && steps.despliegue.outcome == 'failure'
+        run: |
+          echo "## Despliegue fallido: rollback automático" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$HAY_STABLE" != "true" ]]; then
+            echo "No existe una versión stable anterior a la cual volver." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          kubectl -n peliculas rollout undo deployment/peliculas
+          kubectl -n peliculas rollout status deployment/peliculas --timeout=300s
+          ./scripts/smoke-test.sh
+          echo "La versión stable volvió a atender y pasó las verificaciones: producción protegida." | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "La nueva versión NO se promueve y el pipeline termina con error." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Promover la nueva versión a stable
+        if: success() && github.ref == 'refs/heads/main'
+        run: docker buildx imagetools create --tag "$IMAGEN:stable" "$IMAGEN:$TAG"
+
+      - name: Descargar reportes de pruebas (para las métricas del pipeline)
+        if: always() && steps.despliegue.outcome != 'skipped'
+        uses: actions/download-artifact@v4
+        with:
+          name: reportes-pruebas
+          path: ${{ env.PROYECTO }}/target
+
+      - name: Enviar métricas del pipeline al Pushgateway
+        if: always() && steps.despliegue.outcome != 'skipped'
+        env:
+          CI_BUILD_SEGUNDOS: ${{ needs.gate-tests-cobertura.outputs.duracion }}
+          CI_DESPLIEGUE_SEGUNDOS: ${{ steps.despliegue.outputs.segundos }}
+          CI_VULNERABILIDADES_ALTAS: ${{ needs.gate-snyk.outputs.vulnerabilidades }}
+          CI_COMMIT: ${{ github.sha }}
+          CI_RAMA: ${{ github.ref_name }}
+        run: ./scripts/push-metricas-ci.sh
+
+      - name: Registrar historial de métricas (rama metrics-history)
+        if: success() && github.ref == 'refs/heads/main'
+        env:
+          CI_BUILD_SEGUNDOS: ${{ needs.gate-tests-cobertura.outputs.duracion }}
+          CI_DESPLIEGUE_SEGUNDOS: ${{ steps.despliegue.outputs.segundos }}
+          CI_VULNERABILIDADES_ALTAS: ${{ needs.gate-snyk.outputs.vulnerabilidades }}
+          CI_COMMIT: ${{ github.sha }}
+          CI_RAMA: ${{ github.ref_name }}
+        run: ./scripts/registrar-historial.sh "$PROYECTO/target/pipeline-metrics.prom"
+
+      - name: Evidencia del despliegue
+        if: always()
+        env:
+          DURACION: ${{ steps.despliegue.outputs.segundos }}
+        run: |
+          mkdir -p evidencia
+          kubectl get pods -A -o wide > evidencia/pods.txt 2>&1 || true
+          kubectl -n peliculas rollout history deployment/peliculas > evidencia/rollout-history.txt 2>&1 || true
+          kubectl get events -A --sort-by=.lastTimestamp > evidencia/eventos.txt 2>&1 || true
+          EN_EJECUCION="$(kubectl -n peliculas get deployment peliculas -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo 'no disponible')"
+          {
+            echo "### Despliegue en Kubernetes (kind)"
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| Imagen candidata | \`$IMAGEN:$TAG\` |"
+            echo "| Imagen en ejecución al terminar | \`$EN_EJECUCION\` |"
+            echo "| Había versión stable previa | ${HAY_STABLE:-false} |"
+            echo "| Tiempo de despliegue + verificación | ${DURACION:-no completado} s |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat evidencia/rollout-history.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar evidencia del despliegue
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidencia-despliegue
+          path: evidencia/
+          if-no-files-found: ignore
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Reporte de auditoría de la ejecución (siempre, incluso si algo falló)
+  # ---------------------------------------------------------------------------
+  reporte-auditoria:
+    needs: [gate-tests-cobertura, gate-sonarcloud, gate-snyk, gate-auditoria, imagen-docker, despliegue-k8s]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generar reporte de auditoría
+        env:
+          R_TESTS: ${{ needs.gate-tests-cobertura.result }}
+          R_SONAR: ${{ needs.gate-sonarcloud.result }}
+          R_SNYK: ${{ needs.gate-snyk.result }}
+          R_AUDITORIA: ${{ needs.gate-auditoria.result }}
+          R_DOCKER: ${{ needs.imagen-docker.result }}
+          R_DEPLOY: ${{ needs.despliegue-k8s.result }}
+          VULNS: ${{ needs.gate-snyk.outputs.vulnerabilidades }}
+          TAG: ${{ needs.imagen-docker.outputs.tag }}
+          EVENTO: ${{ github.event_name }}
+          RAMA: ${{ github.head_ref || github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          COMMIT: ${{ github.sha }}
+          RUN_NUMERO: ${{ github.run_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: ./scripts/reporte-auditoria.sh | tee reporte-auditoria.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar reporte de auditoría (90 días)
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-auditoria-${{ github.run_number }}
+          path: reporte-auditoria.md
+          retention-days: 90

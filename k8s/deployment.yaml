@@ -9,6 +9,9 @@ metadata:
 spec:
   replicas: 2
   revisionHistoryLimit: 5 # historial disponible para "kubectl rollout undo"
+  # Si en 180 s el rollout no avanza (pods que no quedan listos), se marca como fallido:
+  # el pipeline lo detecta y ejecuta el rollback automático
+  progressDeadlineSeconds: 180
   strategy:
     type: RollingUpdate
     rollingUpdate:
