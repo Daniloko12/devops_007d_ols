@@ -179,6 +179,23 @@ jobs:
       - name: Instalar Snyk CLI
         run: npm install --global snyk@1
 
+      # Snyk arma el árbol de dependencias ejecutando Maven. Si la descarga desde Maven Central
+      # falla por un corte de red, Snyk termina con exit 2 (SNYK-OS-MAVEN-0018) y el gate se cae
+      # sin haber evaluado nada. Este paso descarga todo antes, con reintentos, y si la falla es
+      # real deja el error de Maven visible en el log.
+      - name: Resolver dependencias Maven (con reintentos)
+        working-directory: ${{ env.PROYECTO }}
+        run: |
+          for intento in 1 2 3; do
+            if ./mvnw -B -ntp -q dependency:tree -DoutputFile=/dev/null; then
+              exit 0
+            fi
+            echo "::warning::Intento $intento de resolver dependencias falló; se reintenta en 20 s"
+            sleep 20
+          done
+          echo "::error::No se pudieron resolver las dependencias Maven después de 3 intentos"
+          exit 1
+
       - name: Escaneo SCA (falla si hay vulnerabilidades high o critical)
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
