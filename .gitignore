@@ -10,3 +10,6 @@ target/
 # Archivos locales de herramientas
 *.log
 .DS_Store
+
+# Caché de Python
+__pycache__/

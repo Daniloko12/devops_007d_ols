@@ -32,6 +32,17 @@ configMapGenerator:
   - name: mysql-initdb
     files:
       - mysql/01-usuario-exporter.sh
+  # Dashboard como código: el sidecar de Grafana carga todo ConfigMap con la
+  # etiqueta grafana_dashboard=1. Sin sufijo hash para no dejar copias antiguas.
+  - name: grafana-dashboard-peliculas
+    files:
+      - dashboards/peliculas-overview.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: "EP3 Peliculas"
 
 # Imagen del microservicio. En local: peliculas:local (cargada con "kind load").
 # El pipeline la reemplaza por ghcr.io/daniloko12/devops_007d_ols:sha-<commit>.
