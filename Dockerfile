@@ -1,5 +1,5 @@
 # ---------- Etapa 1: compilación ----------
-FROM maven:3.9.6-eclipse-temurin-21 AS builder
+FROM maven:3.9-eclipse-temurin-26 AS builder
 WORKDIR /app
 COPY pom.xml .
 # Descarga dependencias en una capa propia (se reutiliza si el pom.xml no cambia)
