@@ -1,0 +1,50 @@
+# Grafana Alloy: recolector de logs (reemplazo de Promtail, que llegó a fin de vida).
+# Lee los logs de los pods del namespace "peliculas" desde la API de Kubernetes
+# y los envía a Loki con etiquetas namespace / pod / container / app.
+alloy:
+  configMap:
+    create: true
+    content: |-
+      discovery.kubernetes "pods" {
+        role = "pod"
+        namespaces {
+          names = ["peliculas"]
+        }
+      }
+
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "app"
+        }
+      }
+
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pods.output
+        forward_to = [loki.write.local.receiver]
+      }
+
+      loki.write "local" {
+        endpoint {
+          url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+        }
+      }
+
+controller:
+  # Una sola instancia que lee los logs vía API (no necesita montar discos del nodo)
+  type: deployment
+  replicas: 1

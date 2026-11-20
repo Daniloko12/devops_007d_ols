@@ -1,0 +1,41 @@
+# Manifiestos del microservicio "peliculas" (namespace peliculas).
+# Aplicar con:  kubectl apply -k k8s/
+# Requisitos previos: stack de monitoreo instalado (CRDs ServiceMonitor/PrometheusRule)
+# y el Secret mysql-credentials creado por scripts/create-secrets.sh.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: peliculas
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: catalogo-peliculas
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - mysql.yaml
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml
+  - prometheusrule.yaml
+
+# Los ConfigMaps se generan con un sufijo hash: si cambia su contenido,
+# Kubernetes reinicia automáticamente los pods que los usan.
+configMapGenerator:
+  - name: peliculas-config
+    literals:
+      - SPRING_PROFILES_ACTIVE=k8s
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/catalogo?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=peliculas_app
+      - DB_NAME=catalogo
+  - name: mysql-initdb
+    files:
+      - mysql/01-usuario-exporter.sh
+
+# Imagen del microservicio. En local: peliculas:local (cargada con "kind load").
+# El pipeline la reemplaza por ghcr.io/daniloko12/devops_007d_ols:sha-<commit>.
+images:
+  - name: peliculas
+    newName: peliculas
+    newTag: local

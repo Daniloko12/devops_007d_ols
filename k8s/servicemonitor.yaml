@@ -1,0 +1,30 @@
+# Le indican al Prometheus Operator qué scrapear. Prometheus los descubre
+# automáticamente (no hay que editar prometheus.yml a mano).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: peliculas
+  labels:
+    app.kubernetes.io/name: peliculas
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: peliculas
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mysql
+  labels:
+    app.kubernetes.io/name: mysql
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mysql
+  endpoints:
+    - port: metrics
+      interval: 30s

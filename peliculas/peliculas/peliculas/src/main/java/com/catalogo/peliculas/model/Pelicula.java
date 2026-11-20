@@ -31,12 +31,13 @@ public class Pelicula {
    @NotBlank(message = "El género no puede estar vacío")   
    private String genero;
 
-   @Min(value = 1999, message = "El año debe ser mayor a 1900")
+   // Corregido: el valor (1999) no coincidía con el mensaje (1900)
+   @Min(value = 1900, message = "El año debe ser mayor o igual a 1900")
    @NotNull(message = "El anio no puede ser nulo ")
    private Integer anio;
 
    @NotBlank(message = "El actor principal no puede estar vacío")
    private String actorPrincipal;
 
-};
+}
 

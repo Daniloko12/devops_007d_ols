@@ -1,0 +1,157 @@
+# Base de datos MySQL con almacenamiento persistente (PVC) + sidecar mysqld-exporter
+# que publica métricas de la BD (disponibilidad, conexiones, consultas) para Prometheus.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app.kubernetes.io/name: mysql
+spec:
+  clusterIP: None # headless: DNS estable para el StatefulSet
+  selector:
+    app.kubernetes.io/name: mysql
+  ports:
+    - name: mysql
+      port: 3306
+    - name: metrics
+      port: 9104
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  labels:
+    app.kubernetes.io/name: mysql
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mysql
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mysql
+    spec:
+      # MySQL corre con el usuario "mysql" (UID 999) de la imagen oficial, no como root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          ports:
+            - name: mysql
+              containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-credentials
+                  key: root-password
+            - name: MYSQL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: peliculas-config
+                  key: DB_NAME
+            # Usuario de la aplicación: solo tiene permisos sobre la BD "catalogo"
+            - name: MYSQL_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: peliculas-config
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-credentials
+                  key: app-password
+            # Usada por mysql/01-usuario-exporter.sh al inicializar
+            - name: EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-credentials
+                  key: exporter-password
+          # "mysqladmin ping" devuelve 0 si el servidor responde (no necesita credenciales)
+          startupProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+
+        - name: mysqld-exporter
+          image: prom/mysqld-exporter:v0.18.0
+          args:
+            - --mysqld.address=127.0.0.1:3306
+            - --mysqld.username=exporter
+          env:
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-credentials
+                  key: exporter-password
+          ports:
+            - name: metrics
+              containerPort: 9104
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            runAsUser: 65534
+            runAsGroup: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: initdb
+          configMap:
+            name: mysql-initdb
+            defaultMode: 0555
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
