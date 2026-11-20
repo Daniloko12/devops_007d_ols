@@ -17,7 +17,8 @@ public class PeliculaService {
 
     private static final Logger log = LoggerFactory.getLogger(PeliculaService.class);
 
-    // Métrica de negocio: en Prometheus aparece como peliculas_operaciones_total{operacion="crear|actualizar|eliminar"}
+    // Métrica de negocio: en Prometheus es el contador peliculas_operaciones_total,
+    // con la etiqueta "operacion" (crear, actualizar o eliminar)
     private static final String METRICA_OPERACIONES = "peliculas.operaciones";
 
     private final PeliculaRepository repository;

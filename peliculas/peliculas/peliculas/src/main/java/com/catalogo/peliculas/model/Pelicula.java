@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;              // Genera un constructor vacío (s
 import jakarta.validation.constraints.*;     // Permite validar los datos (ej: campos obligatorios, valores mínimos, etc.)
 
 
-//import java.util.Date;
 
 @Entity                     // Indica que esta clase es una entidad que se mapeará a una tabla en la BD
 @Table(name="pelicula")     // Define el nombre de la tabla en la base de datos
