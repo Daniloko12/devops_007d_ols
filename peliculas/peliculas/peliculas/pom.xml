@@ -19,7 +19,7 @@
 
 		<!-- Versiones de librerías/plugins no gestionadas por Spring Boot -->
 		<!-- springdoc 3.0.x es la línea compatible con Spring Boot 4.0.x -->
-		<springdoc.version>3.0.3</springdoc.version>
+		<springdoc.version>3.2.0</springdoc.version>
 		<jacoco.version>0.8.14</jacoco.version>
 
 		<!-- GATE DE COBERTURA: si las pruebas cubren menos de este porcentaje,
