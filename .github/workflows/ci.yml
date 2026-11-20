@@ -557,8 +557,22 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Auditoría de configuración: la protección de main debe seguir activa (PR obligatorio,
+      # gates requeridos, sin force-push ni borrado). Si alguien la desactiva, queda registrado.
+      - name: Auditar protección de la rama main
+        id: proteccion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ESTADO="$(./scripts/auditar-proteccion-rama.sh "${{ github.repository }}" main)"
+          echo "estado=$ESTADO" >> "$GITHUB_OUTPUT"
+          if [[ "$ESTADO" != "ok" ]]; then
+            echo "::warning::Protección de la rama main: $ESTADO"
+          fi
+
       - name: Generar reporte de auditoría
         env:
+          R_PROTECCION: ${{ steps.proteccion.outputs.estado }}
           R_TESTS: ${{ needs.gate-tests-cobertura.result }}
           R_SONAR: ${{ needs.gate-sonarcloud.result }}
           SONAR_APLICA: ${{ needs.gate-sonarcloud.outputs.aplica }}
