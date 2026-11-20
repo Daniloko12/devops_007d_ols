@@ -1,0 +1,18 @@
+# Política de Snyk: excepciones DOCUMENTADAS y con fecha de vencimiento.
+# Regla del proyecto: solo se aceptan vulnerabilidades SIN versión corregida disponible,
+# con justificación técnica y vencimiento (al vencer, el gate vuelve a fallar y se re-evalúa).
+version: v1.25.0
+ignore:
+  SNYK-JAVA-ORGGLASSFISHJAXB-20883142:
+    - '*':
+        reason: >-
+          CVE-2026-92877 (CWE-611, XXE) en org.glassfish.jaxb:jaxb-core, dependencia
+          transitiva de Hibernate (spring-boot-starter-data-jpa). Afecta a todas las
+          versiones >= 4.0.0-M4 y la corrección aún no está publicada (Snyk, 13-10-2026).
+          Explotable solo si la aplicación deserializa XML no confiable con JAXB.
+          La aplicación no procesa XML de entrada (la API solo recibe JSON) ni usa
+          archivos de mapeo XML de Hibernate, por lo que el vector no es alcanzable.
+          Se revisa al vencer o cuando exista una versión corregida (Dependabot).
+        expires: 2027-02-28T00:00:00.000Z
+        created: 2026-11-20T00:00:00.000Z
+patch: {}

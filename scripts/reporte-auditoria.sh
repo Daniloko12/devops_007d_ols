@@ -5,6 +5,7 @@
 #
 # Variables (las entrega el job reporte-auditoria del pipeline):
 #   R_TESTS R_SONAR R_SNYK R_AUDITORIA R_DOCKER R_DEPLOY  -> success | failure | skipped | cancelled
+#   SONAR_APLICA -> true | false (plan Free de SonarCloud: solo main y PR hacia main)
 #   VULNS TAG EVENTO RAMA ACTOR COMMIT RUN_URL RUN_NUMERO
 set -euo pipefail
 
@@ -17,6 +18,12 @@ estado() {
     *)         echo "— ${1:-sin dato}" ;;
   esac
 }
+
+# En ramas donde SonarCloud no analiza (plan Free), el control se informa como "no aplica".
+ESTADO_SONAR="$(estado "${R_SONAR:-}")"
+if [[ "${SONAR_APLICA:-true}" == "false" && "${R_SONAR:-}" == "success" ]]; then
+  ESTADO_SONAR="➖ No aplica en esta rama (se exige en main)"
+fi
 
 GATES_OK=true
 for r in "${R_TESTS:-}" "${R_SONAR:-}" "${R_SNYK:-}" "${R_AUDITORIA:-}" "${R_DOCKER:-}"; do
@@ -41,7 +48,7 @@ cat <<EOF
 |---|---|---|---|---|---|
 | 1 | Pruebas automatizadas | Maven Surefire | 0 tests fallidos | ISO/IEC 27001:2022 A.8.29 | $(estado "${R_TESTS:-}") |
 | 2 | Cobertura de código | JaCoCo | líneas y ramas ≥ 80 % | ISO/IEC 27001:2022 A.8.29 | $(estado "${R_TESTS:-}") |
-| 3 | Análisis estático (SAST) | SonarCloud | Quality Gate aprobado | ISO/IEC 27001:2022 A.8.28 | $(estado "${R_SONAR:-}") |
+| 3 | Análisis estático (SAST) | SonarCloud | Quality Gate aprobado | ISO/IEC 27001:2022 A.8.28 | ${ESTADO_SONAR} |
 | 4 | Dependencias vulnerables (SCA) | Snyk | 0 high/critical (encontradas: ${VULNS:-s/d}) | ISO/IEC 27001:2022 A.8.8 | $(estado "${R_SNYK:-}") |
 | 5 | Secretos en el código | Gitleaks | 0 hallazgos | ISO/IEC 27001:2022 A.5.17 | $(estado "${R_AUDITORIA:-}") |
 | 6 | Configuración insegura (Dockerfile, Kubernetes) | Trivy config | 0 HIGH/CRITICAL | CIS Docker / Kubernetes Benchmark, ISO A.8.9 | $(estado "${R_AUDITORIA:-}") |

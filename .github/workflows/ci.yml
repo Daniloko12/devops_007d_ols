@@ -52,9 +52,9 @@ jobs:
     outputs:
       duracion: ${{ steps.medir.outputs.segundos }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -92,7 +92,7 @@ jobs:
 
       - name: Publicar reportes de pruebas y cobertura
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: reportes-pruebas
           path: |
@@ -105,29 +105,48 @@ jobs:
   # ---------------------------------------------------------------------------
   # GATE 2: análisis estático (SAST) + Quality Gate de SonarCloud
   # ---------------------------------------------------------------------------
+  # El plan Free de SonarCloud solo analiza la rama principal (main) y los PR hacia main.
+  # Por eso el Quality Gate se exige en: push a main, PR hacia main y ejecución manual en main.
+  # En develop y en PR hacia develop el job lo informa como "no aplica" (no se analiza).
   gate-sonarcloud:
     needs: gate-tests-cobertura
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      SONAR_APLICA: ${{ github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.base_ref == 'main') }}
+    outputs:
+      aplica: ${{ env.SONAR_APLICA }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Alcance del análisis de SonarCloud
+        run: |
+          if [[ "$SONAR_APLICA" == "true" ]]; then
+            echo "### SonarCloud: se analiza y se exige el Quality Gate" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### SonarCloud: no aplica en esta rama (plan Free: solo main y PR hacia main). El Quality Gate se exige al integrar en main." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@v5
+        if: env.SONAR_APLICA == 'true'
         with:
           fetch-depth: 0 # SonarCloud necesita el historial para detectar el "código nuevo"
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
+        if: env.SONAR_APLICA == 'true'
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
 
       - name: Caché de SonarCloud
-        uses: actions/cache@v4
+        if: env.SONAR_APLICA == 'true'
+        uses: actions/cache@v5
         with:
           path: ~/.sonar/cache
           key: sonar-${{ runner.os }}
           restore-keys: sonar-${{ runner.os }}
 
       - name: Análisis SAST y espera del Quality Gate (falla si no se aprueba)
+        if: env.SONAR_APLICA == 'true'
         working-directory: ${{ env.PROYECTO }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -149,9 +168,9 @@ jobs:
     outputs:
       vulnerabilidades: ${{ steps.contar.outputs.altas }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -165,6 +184,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: >
           snyk test --file="$PROYECTO/pom.xml"
+          --policy-path=.snyk
           --severity-threshold=high
           --json-file-output=snyk.json
           --sarif-file-output=snyk.sarif
@@ -193,7 +213,7 @@ jobs:
         continue-on-error: true # informativo, no es un gate
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk monitor --file="$PROYECTO/pom.xml" --project-name=peliculas
+        run: snyk monitor --file="$PROYECTO/pom.xml" --policy-path=.snyk --project-name=peliculas
 
       - name: Publicar resultados en GitHub Security
         if: always() && hashFiles('snyk.sarif') != ''
@@ -214,7 +234,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # Gitleaks revisa los commits del push o del PR
 
@@ -277,7 +297,7 @@ jobs:
 
       - name: Guardar reportes de auditoría
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: reportes-auditoria-seguridad
           path: reportes/
@@ -301,7 +321,7 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Calcular tag de la imagen (trazabilidad commit -> imagen)
         id: version
@@ -309,10 +329,10 @@ jobs:
           echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Construir imagen
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./peliculas/peliculas/peliculas
           file: ./Dockerfile
@@ -379,7 +399,7 @@ jobs:
     env:
       TAG: ${{ needs.imagen-docker.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Crear clúster Kubernetes (kind)
         run: kind create cluster --name ep3 --config monitoring/kind-config.yaml --wait 120s
@@ -444,7 +464,7 @@ jobs:
 
       - name: Descargar reportes de pruebas (para las métricas del pipeline)
         if: always() && steps.despliegue.outcome != 'skipped'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: reportes-pruebas
           path: ${{ env.PROYECTO }}/target
@@ -494,7 +514,7 @@ jobs:
 
       - name: Guardar evidencia del despliegue
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: evidencia-despliegue
           path: evidencia/
@@ -510,12 +530,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Generar reporte de auditoría
         env:
           R_TESTS: ${{ needs.gate-tests-cobertura.result }}
           R_SONAR: ${{ needs.gate-sonarcloud.result }}
+          SONAR_APLICA: ${{ needs.gate-sonarcloud.outputs.aplica }}
           R_SNYK: ${{ needs.gate-snyk.result }}
           R_AUDITORIA: ${{ needs.gate-auditoria.result }}
           R_DOCKER: ${{ needs.imagen-docker.result }}
@@ -531,7 +552,7 @@ jobs:
         run: ./scripts/reporte-auditoria.sh | tee reporte-auditoria.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Guardar reporte de auditoría (90 días)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: reporte-auditoria-${{ github.run_number }}
           path: reporte-auditoria.md
