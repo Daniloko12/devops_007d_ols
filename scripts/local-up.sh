@@ -35,6 +35,7 @@ echo "==> 4/6 Secretos de la base de datos"
 echo "==> 5/6 Despliegue (kubectl apply -k k8s/)"
 kubectl apply -k "$ROOT/k8s"
 kubectl -n peliculas rollout status statefulset/mysql --timeout=300s
+"$ROOT/scripts/asegurar-usuario-exporter.sh"
 # En local la imagen siempre se llama peliculas:local; el restart obliga a usar la recién cargada
 kubectl -n peliculas rollout restart deployment/peliculas
 kubectl -n peliculas rollout status deployment/peliculas --timeout=300s
