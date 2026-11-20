@@ -6,6 +6,7 @@
 # Variables (las entrega el job reporte-auditoria del pipeline):
 #   R_TESTS R_SONAR R_SNYK R_AUDITORIA R_DOCKER R_DEPLOY  -> success | failure | skipped | cancelled
 #   SONAR_APLICA -> true | false (plan Free de SonarCloud: solo main y PR hacia main)
+#   R_PROTECCION -> salida de scripts/auditar-proteccion-rama.sh ("ok", "faltan: ..." o "sin datos ...")
 #   VULNS TAG EVENTO RAMA ACTOR COMMIT RUN_URL RUN_NUMERO
 set -euo pipefail
 
@@ -24,6 +25,14 @@ ESTADO_SONAR="$(estado "${R_SONAR:-}")"
 if [[ "${SONAR_APLICA:-true}" == "false" && "${R_SONAR:-}" == "success" ]]; then
   ESTADO_SONAR="➖ No aplica en esta rama (se exige en main)"
 fi
+
+# Control de configuración del repositorio (no bloquea: deja registrada la desviación)
+case "${R_PROTECCION:-}" in
+  ok)      ESTADO_PROTECCION="✅ Activa" ;;
+  "")      ESTADO_PROTECCION="— sin dato" ;;
+  "sin datos"*) ESTADO_PROTECCION="— ${R_PROTECCION}" ;;
+  *)       ESTADO_PROTECCION="⚠️ Desviación: ${R_PROTECCION}" ;;
+esac
 
 GATES_OK=true
 for r in "${R_TESTS:-}" "${R_SONAR:-}" "${R_SNYK:-}" "${R_AUDITORIA:-}" "${R_DOCKER:-}"; do
@@ -54,8 +63,9 @@ cat <<EOF
 | 6 | Configuración insegura (Dockerfile, Kubernetes) | Trivy config | 0 HIGH/CRITICAL | CIS Docker / Kubernetes Benchmark, ISO A.8.9 | $(estado "${R_AUDITORIA:-}") |
 | 7 | Vulnerabilidades de la imagen | Trivy image | 0 HIGH/CRITICAL con corrección | ISO/IEC 27001:2022 A.8.8 | $(estado "${R_DOCKER:-}") |
 | 8 | Despliegue verificado y rollback | kind + smoke-test.sh | rollout y verificaciones OK | ISO/IEC 27001:2022 A.8.32 | $(estado "${R_DEPLOY:-}") |
+| 9 | Protección de la rama main | GitHub Ruleset + auditar-proteccion-rama.sh | PR obligatorio, 5 gates requeridos, sin force-push ni borrado | ISO/IEC 27001:2022 A.8.4, A.8.32 | ${ESTADO_PROTECCION} |
 
-Cambios a \`main\`: solo por Pull Request con todos los controles en verde (regla de protección de rama).
+Cambios a \`main\` y \`develop\`: solo por Pull Request con los gates 1 a 7 en verde (ruleset \`proteccion-main-develop\`).
 
 ## Decisión
 EOF
