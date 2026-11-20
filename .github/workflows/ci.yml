@@ -498,6 +498,14 @@ jobs:
           kubectl get pods -A -o wide > evidencia/pods.txt 2>&1 || true
           kubectl -n peliculas rollout history deployment/peliculas > evidencia/rollout-history.txt 2>&1 || true
           kubectl get events -A --sort-by=.lastTimestamp > evidencia/eventos.txt 2>&1 || true
+          kubectl -n peliculas describe pods > evidencia/describe-pods-peliculas.txt 2>&1 || true
+          # Logs para diagnosticar sin repetir la ejecución ("anterior" = intento previo a un reinicio).
+          # No contienen claves: las credenciales llegan por variables de entorno desde el Secret.
+          for c in mysql mysqld-exporter; do
+            kubectl -n peliculas logs mysql-0 -c "$c" --tail=300 > "evidencia/log-mysql-0-$c.txt" 2>&1 || true
+            kubectl -n peliculas logs mysql-0 -c "$c" --previous --tail=300 > "evidencia/log-mysql-0-$c-anterior.txt" 2>&1 || true
+          done
+          kubectl -n peliculas logs -l app.kubernetes.io/name=peliculas --all-containers --prefix --tail=200 > evidencia/log-peliculas.txt 2>&1 || true
           EN_EJECUCION="$(kubectl -n peliculas get deployment peliculas -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo 'no disponible')"
           {
             echo "### Despliegue en Kubernetes (kind)"
