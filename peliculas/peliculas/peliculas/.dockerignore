@@ -1,0 +1,6 @@
+# Archivos que no se envían al contexto de "docker build"
+target/
+.mvn/wrapper/maven-wrapper.jar
+*.iml
+.idea/
+.vscode/

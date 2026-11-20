@@ -1,5 +1,5 @@
-version: '3.8'
-
+# La clave "version" se eliminó: Docker Compose v2 la considera obsoleta.
+# Antes de levantar: cp .env.example .env  (y define tus credenciales)
 services:
   mysqldb:
     image: mysql:8.0
@@ -21,14 +21,17 @@ services:
       retries: 5
 
   app-peliculas:
-    build: 
+    build:
       context: ./peliculas/peliculas/peliculas
-      file: ./Dockerfile
+      # "dockerfile" es la clave válida en Compose ("file" no existe).
+      # La ruta es relativa al context: el Dockerfile está en la raíz del repo.
+      dockerfile: ../../../Dockerfile
     container_name: app_peliculas
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/${DB_NAME}?useSSL=false&serverTimezone=UTC
+      # allowPublicKeyRetrieval=true es necesario en MySQL 8 cuando useSSL=false
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/${DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
     #  Orden de arranque. La app espera a que MySQL esté "healthy"

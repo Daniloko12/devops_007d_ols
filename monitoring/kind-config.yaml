@@ -1,0 +1,7 @@
+# Clúster Kubernetes local/CI con kind (Kubernetes dentro de Docker).
+# El mismo archivo lo usan scripts/local-up.sh (tu PC) y el pipeline (GitHub Actions).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ep3
+nodes:
+  - role: control-plane

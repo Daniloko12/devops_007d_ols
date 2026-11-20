@@ -1,0 +1,15 @@
+# Variables de entorno locales: NUNCA se versionan (contienen credenciales).
+# Usa .env.example como plantilla: cp .env.example .env
+.env
+.env.*
+!.env.example
+
+# Artefactos de compilación
+target/
+
+# Archivos locales de herramientas
+*.log
+.DS_Store
+
+# Caché de Python
+__pycache__/
