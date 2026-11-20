@@ -35,6 +35,13 @@
 	</properties>
 
 	<dependencies>
+		<!-- DEMOSTRACIÓN del gate de Snyk: versión con vulnerabilidad crítica conocida
+		     (deserialización insegura). No se integra. -->
+		<dependency>
+			<groupId>commons-collections</groupId>
+			<artifactId>commons-collections</artifactId>
+			<version>3.2.1</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
