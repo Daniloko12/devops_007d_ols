@@ -35,6 +35,7 @@ kubectl -n peliculas annotate deployment/peliculas \
   kubernetes.io/change-cause="${REPO_IMAGEN}:${TAG}" --overwrite >/dev/null
 
 kubectl -n peliculas rollout status statefulset/mysql --timeout=300s
+"$ROOT/scripts/asegurar-usuario-exporter.sh"
 # progressDeadlineSeconds (k8s/deployment.yaml) corta antes si los pods no progresan
 kubectl -n peliculas rollout status deployment/peliculas --timeout="${ROLLOUT_TIMEOUT:-300s}"
 echo "==> Rollout completo: ${REPO_IMAGEN}:${TAG}"
