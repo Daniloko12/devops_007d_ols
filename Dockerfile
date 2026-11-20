@@ -10,7 +10,7 @@ COPY src ./src
 RUN mvn -B -q clean package -DskipTests -Djacoco.skip=true
 
 # ---------- Etapa 2: imagen final (solo JRE) ----------
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:24-jre-alpine
 
 # SHA del commit, entregado por el pipeline con --build-arg GIT_COMMIT=<sha>
 ARG GIT_COMMIT=local
