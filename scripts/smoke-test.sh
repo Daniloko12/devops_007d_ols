@@ -81,6 +81,8 @@ port_forward peliculas svc/peliculas "$APP_PORT" 8080
 BASE="http://localhost:$APP_PORT"
 verificar_http "Readiness (app + BD)" "$BASE/actuator/health/readiness" 200
 verificar_http "Listar películas" "$BASE/peliculas" 200
+# Búsqueda por título: falla con 500 si la carga inicial duplicó registros (2 réplicas a la vez)
+verificar_http "Buscar por título" "$BASE/peliculas/titulo/Gladiador" 200
 verificar_http "Película inexistente" "$BASE/peliculas/999999" 404
 verificar_http "Id no numérico" "$BASE/peliculas/abc" 400
 # Se guarda la respuesta completa antes de buscar: con "curl | grep -q" y pipefail,

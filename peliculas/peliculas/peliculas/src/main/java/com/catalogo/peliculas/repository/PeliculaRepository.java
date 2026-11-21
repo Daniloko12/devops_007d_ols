@@ -21,5 +21,7 @@ public interface PeliculaRepository extends JpaRepository<Pelicula, Integer> {
 
     // Buscar por título (ignorando mayúsculas/minúsculas)
     Optional<Pelicula> findByTituloIgnoreCase(String titulo);
+
+    boolean existsByTituloIgnoreCase(String titulo);
     
 }

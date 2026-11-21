@@ -4,6 +4,7 @@ import com.catalogo.peliculas.exception.PeliculaNoEncontradaException;
 import com.catalogo.peliculas.model.Pelicula;
 import com.catalogo.peliculas.service.PeliculaService;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -155,6 +156,19 @@ class PeliculaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"titulo\": "))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void crearPeliculaConTituloRepetidoRetorna409() throws Exception {
+        when(service.guardarPelicula(any(Pelicula.class)))
+                .thenThrow(new DataIntegrityViolationException("Duplicate entry 'Dune' for key 'uk_pelicula_titulo'"));
+
+        mockMvc.perform(post("/peliculas/agregar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON_VALIDO))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.detail").value("Ya existe una película con ese título"));
     }
 
     // ---------- PUT /peliculas/actualizar/{id} ----------
