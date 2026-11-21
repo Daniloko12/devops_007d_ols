@@ -249,20 +249,29 @@ SECURITY.md                        política de seguridad
 ```
 
 ### 10. Justificación técnica de las decisiones
+Para esta tercera evaluación decidí llevar el microservicio de películas de un entorno local con Docker Compose a un entorno orquestado con Kubernetes (`kind`) y observabilidad completa, manteniendo la misma base de Java 21, Spring Boot y MySQL.
 
-<!-- Sección a completar por el estudiante. -->
+Elegí `kind` junto con Kustomize porque me permite levantar el mismo clúster de Kubernetes tanto en mi equipo como en el runner del pipeline, con configuraciones ordenadas y variables separadas para evitar tener que editar archivos a mano cada vez que cambio algo. También fijé las versiones de los charts de Helm y el digest de MySQL para que el entorno sea repetible y no cambie solo por una actualización inesperada.
+
+En la parte de calidad y seguridad, subí la exigencia respecto a la EP2: no solo se corren las pruebas y los análisis de SonarCloud y Snyk, sino que agregué cobertura mínima del 80% con JaCoCo, escaneo de secretos con Gitleaks, revisión de configuración/imágenes con Trivy y protección de ramas en GitHub (`main` y `develop`). Si algo falla o queda bajo el umbral, el pipeline corta ahí mismo y no deja pasar el cambio.
+
+Para el despliegue en Kubernetes configuré dos réplicas con estrategia `RollingUpdate`, sondas de salud (`/actuator/health/*`), usuario no root y `smoke-test.sh` después de desplegar. Si el despliegue falla o las verificaciones no pasan, se hace `rollback` automático a `:stable` para no dejar una versión rota activa. Y para la observabilidad, junté métricas con Prometheus y Grafana, logs estructurados con `traceId`/`spanId` enviados por Alloy hacia Loki, reglas de alerta (`PrometheusRule`) y el registro de métricas del pipeline en `Pushgateway` y `historial.csv` (en la rama `metrics-history`), ya que el clúster del pipeline se destruye al terminar cada corrida.
 
 ### 11. Conclusiones
+Al unir el pipeline CI/CD, los controles de seguridad, el despliegue en Kubernetes y el stack de observabilidad, el microservicio de películas queda mucho más protegido y fácil de revisar cuando ocurre algún problema. Ya no depende solo de que la compilación o las pruebas pasen en un momento puntual, sino que existen filtros automáticos antes de construir y publicar la imagen, y verificaciones después de desplegar.
 
-<!-- Sección a completar por el estudiante. -->
+Contar con métricas de HTTP, JVM, base de datos, alertas y logs centralizados en Grafana y Loki permite ver cómo se comporta el servicio y qué pasa cuando hay errores o se simula una falla de despliegue. En conjunto, el proyecto pasa de ser solo una API funcional con un pipeline básico a un flujo de trabajo más completo y cercano a lo que se exige en entornos reales de DevOps.
 
 ### 12. Reflexión individual
+En lo personal, pasar de Docker Compose a Kubernetes con observabilidad completa fue lo que más me exigió en esta evaluación. Al principio me costó harto entender cómo encajaban todas las piezas juntas: el clúster en `kind`, los manifiestos de Kubernetes, Prometheus, Grafana, Alloy, Loki y el envío de métricas del pipeline.
 
-<!-- Sección a completar por el estudiante. -->
+Cuando aparecían errores en el pipeline o en los pods, tuve que ir revisando paso a paso los logs, las sondas, las reglas de protección y los scripts para cachar qué estaba fallando. Aunque al comienzo se veía gigante y enredado, ir probándolo y viendo las métricas, alertas y logs funcionando en el dashboard me ayudó a entender mucho mejor cómo se monitorea y protege un servicio en la práctica.
 
 ### 13. Declaración de uso de Inteligencia Artificial
-
-<!-- Sección a completar por el estudiante (incluir la cita según bibliotecas.duoc.cl/ia). -->
+En cumplimiento de las indicaciones de uso ético de Inteligencia Artificial de la asignatura,Claude generó el código Java y sus pruebas, el pom.xml, el Dockerfile, los manifiestos de Kubernetes, los valores de Helm, los scripts, el pipeline ci.yml y el dashboard de Grafana.
+También diagnosticó las fallas del pipeline a partir de los logs. Todas las configuraciones, pruebas, evidencias y decisiones del proyecto fueron revisadas y validadas por mí.
+**Referencias**
+Anthropic. (2026). *Claude* (versión Opus 5.5) [Modelo de lenguaje de gran tamaño]. https://claude.ai
 
 ---
 
