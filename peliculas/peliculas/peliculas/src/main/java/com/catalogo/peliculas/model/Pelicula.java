@@ -9,7 +9,10 @@ import jakarta.validation.constraints.*;     // Permite validar los datos (ej: c
 
 
 @Entity                     // Indica que esta clase es una entidad que se mapeará a una tabla en la BD
-@Table(name="pelicula")     // Define el nombre de la tabla en la base de datos
+@Table(name="pelicula",     // Define el nombre de la tabla en la base de datos
+        // El título es único: la API busca por título y espera un solo resultado.
+        // Además impide que dos réplicas carguen los mismos datos iniciales (ver DataLoader).
+        uniqueConstraints = @UniqueConstraint(name = "uk_pelicula_titulo", columnNames = "titulo"))
 @Data                       // Genera automáticamente getters, setters, toString, equals y hashCode
 @NoArgsConstructor          // Genera un constructor vacío (necesario para JPA)
 @AllArgsConstructor         // Genera un constructor con todos los atributos

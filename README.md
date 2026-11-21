@@ -96,7 +96,7 @@ por digest en `k8s/mysql.yaml`, para que el PC y el pipeline instalen exactament
 | 5 | `gate-auditoria` (Gitleaks) | 0 secretos en los commits del cambio | Exit 1, no se construye la imagen |
 | 6 | `gate-auditoria` (Trivy config) | 0 HIGH/CRITICAL en Dockerfile y manifiestos | Exit 1, no se construye la imagen |
 | 7 | `imagen-docker` (Trivy image) | 0 HIGH/CRITICAL con corrección disponible | Exit 1, la imagen no se publica |
-| 8 | `despliegue-k8s` (`smoke-test.sh`) | Rollout completo y 9 verificaciones | Rollback a `stable`, la versión no se promueve, exit 1 |
+| 8 | `despliegue-k8s` (`smoke-test.sh`) | Rollout completo y 10 verificaciones | Rollback a `stable`, la versión no se promueve, exit 1 |
 
 - El plan Free de SonarCloud solo analiza `main` y los PR hacia `main`; en `develop` el gate se informa como "no aplica".
 - Los resultados de Snyk, Gitleaks y Trivy se publican en la pestaña **Security** (SARIF).
@@ -126,7 +126,7 @@ verifica en cada ejecución que la protección siga activa (control 9 del report
 2. Crea credenciales aleatorias para la base de datos (`create-secrets.sh`); nunca aparecen en los logs.
 3. Despliega la imagen `stable` vigente (`desplegar.sh`), que representa la versión en producción.
 4. Despliega la imagen nueva `sha-<commit>` y ejecuta `smoke-test.sh`:
-   códigos HTTP 200/404/400, métrica `app_build_version`, réplicas leídas por Prometheus,
+   códigos HTTP 200/404/400 (incluida la búsqueda por título), métrica `app_build_version`, réplicas leídas por Prometheus,
    `mysql_up`, Pushgateway y líneas de log en Loki.
 5. Si todo pasa: promueve la imagen a `:stable`, envía las métricas al Pushgateway y agrega una fila a `historial.csv`.
 6. Si algo falla: `kubectl rollout undo` vuelve a `stable`, se verifica de nuevo y la versión no se promueve.

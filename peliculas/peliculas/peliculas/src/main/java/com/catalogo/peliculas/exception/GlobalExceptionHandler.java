@@ -2,6 +2,7 @@ package com.catalogo.peliculas.exception;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -39,6 +40,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.warn("Recurso no encontrado: {}", ex.getMessage());
         ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problema.setTitle("Película no encontrada");
+        return problema;
+    }
+
+    /** 409: el cambio choca con datos existentes (por ejemplo, un título que ya está registrado). */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail manejarConflicto(DataIntegrityViolationException ex) {
+        log.warn("Conflicto con datos existentes: {}", ex.getMostSpecificCause().getMessage());
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Ya existe una película con ese título");
+        problema.setTitle("Conflicto con datos existentes");
         return problema;
     }
 
