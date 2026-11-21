@@ -268,9 +268,11 @@ En lo personal, pasar de Docker Compose a Kubernetes con observabilidad completa
 Cuando aparecían errores en el pipeline o en los pods, tuve que ir revisando paso a paso los logs, las sondas, las reglas de protección y los scripts para cachar qué estaba fallando. Aunque al comienzo se veía gigante y enredado, ir probándolo y viendo las métricas, alertas y logs funcionando en el dashboard me ayudó a entender mucho mejor cómo se monitorea y protege un servicio en la práctica.
 
 ### 13. Declaración de uso de Inteligencia Artificial
-En cumplimiento de las indicaciones de uso ético de Inteligencia Artificial de la asignatura,Claude generó el código Java y sus pruebas, el pom.xml, el Dockerfile, los manifiestos de Kubernetes, los valores de Helm, los scripts, el pipeline ci.yml y el dashboard de Grafana.
+En cumplimiento de las indicaciones de uso ético de Inteligencia Artificial de la asignatura, Claude generó el código Java y sus pruebas, el pom.xml, el Dockerfile, los manifiestos de Kubernetes, los valores de Helm, los scripts, el pipeline ci.yml y el dashboard de Grafana, y redactó la documentación técnica (secciones 1 a 9 de este README, SECURITY.md, docs/cumplimiento.md y la plantilla de PR).
 También diagnosticó las fallas del pipeline a partir de los logs. Todas las configuraciones, pruebas, evidencias y decisiones del proyecto fueron revisadas y validadas por mí.
+
 **Referencias**
+
 Anthropic. (2026). *Claude* (versión Opus 5.5) [Modelo de lenguaje de gran tamaño]. https://claude.ai
 
 ---
