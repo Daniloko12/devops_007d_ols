@@ -20,7 +20,7 @@
 		<!-- Versiones de librerías/plugins no gestionadas por Spring Boot -->
 		<!-- springdoc 3.0.x es la línea compatible con Spring Boot 4.0.x -->
 		<springdoc.version>3.0.3</springdoc.version>
-		<jacoco.version>0.8.14</jacoco.version>
+		<jacoco.version>0.8.16</jacoco.version>
 
 		<!-- GATE DE COBERTURA: si las pruebas cubren menos de este porcentaje,
 		     "mvn verify" termina con BUILD FAILURE (exit code 1) y el pipeline se detiene. -->
