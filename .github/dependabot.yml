@@ -6,15 +6,31 @@ updates:
     target-branch: "develop" # mismo flujo que el resto de los cambios: develop -> main
     schedule:
       interval: "weekly"
-  # Acciones usadas en .github/workflows
+    ignore:
+      # El Maven Wrapper se mantiene en la línea 3.9.x. Un cambio de línea (3.10, 4.x)
+      # se evalúa y se prueba a mano; Dependabot solo propone parches de 3.9.
+      - dependency-name: "org.apache.maven:apache-maven"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+  # Acciones usadas en .github/workflows (todas en un solo PR semanal)
   - package-ecosystem: "github-actions"
     directory: "/"
     target-branch: "develop" # mismo flujo que el resto de los cambios: develop -> main
     schedule:
       interval: "weekly"
+    groups:
+      acciones:
+        patterns: ["*"]
   # Imágenes base del Dockerfile (maven, eclipse-temurin)
   - package-ecosystem: "docker"
     directory: "/"
     target-branch: "develop" # mismo flujo que el resto de los cambios: develop -> main
     schedule:
       interval: "weekly"
+    ignore:
+      # El proyecto usa Java 21 (LTS). Cambiar la versión de Java (por ejemplo a 24 o 26,
+      # que no son LTS) se decide y se prueba a mano.
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+      # El tag de la imagen de build junta Maven y Java (3.9.x-eclipse-temurin-21) y
+      # Dependabot propone cambiar también Java; por eso se actualiza a mano.
+      - dependency-name: "maven"
