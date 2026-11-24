@@ -52,7 +52,7 @@ jobs:
     outputs:
       duracion: ${{ steps.medir.outputs.segundos }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v6
         with:
@@ -92,7 +92,7 @@ jobs:
 
       - name: Publicar reportes de pruebas y cobertura
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: reportes-pruebas
           path: |
@@ -125,7 +125,7 @@ jobs:
             echo "### SonarCloud: no aplica en esta rama (plan Free: solo main y PR hacia main). El Quality Gate se exige al integrar en main." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: env.SONAR_APLICA == 'true'
         with:
           fetch-depth: 0 # SonarCloud necesita el historial para detectar el "código nuevo"
@@ -168,7 +168,7 @@ jobs:
     outputs:
       vulnerabilidades: ${{ steps.contar.outputs.altas }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v6
         with:
@@ -251,7 +251,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # Gitleaks revisa los commits del push o del PR
 
@@ -314,7 +314,7 @@ jobs:
 
       - name: Guardar reportes de auditoría
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: reportes-auditoria-seguridad
           path: reportes/
@@ -338,7 +338,7 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Calcular tag de la imagen (trazabilidad commit -> imagen)
         id: version
@@ -416,7 +416,7 @@ jobs:
     env:
       TAG: ${{ needs.imagen-docker.outputs.tag }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Crear clúster Kubernetes (kind)
         run: kind create cluster --name ep3 --config monitoring/kind-config.yaml --wait 120s
@@ -539,7 +539,7 @@ jobs:
 
       - name: Guardar evidencia del despliegue
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: evidencia-despliegue
           path: evidencia/
@@ -555,7 +555,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Auditoría de configuración: la protección de main debe seguir activa (PR obligatorio,
       # gates requeridos, sin force-push ni borrado). Si alguien la desactiva, queda registrado.
@@ -591,7 +591,7 @@ jobs:
         run: ./scripts/reporte-auditoria.sh | tee reporte-auditoria.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Guardar reporte de auditoría (90 días)
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: reporte-auditoria-${{ github.run_number }}
           path: reporte-auditoria.md
